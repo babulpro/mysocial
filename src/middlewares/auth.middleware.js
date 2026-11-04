@@ -1,51 +1,74 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const { DecodedJwtToken } = require('../utils/jwt');
 
 /**
  * protect middleware
- * Verifies the JWT token using jose (DecodedJwtToken).
- * Attaches the logged-in user object to req.user.
- * Usage: add protect before any route that needs authentication.
+ * Supports:
+ * 1. Better-Auth session (forwarded securely via x-user-* headers from Next.js server)
+ * 2. JWT Bearer token / x-auth-token
  */
 const protect = async (req, res, next) => {
-  let token;
-
-  // Token can come in "Authorization: Bearer <token>" or "x-auth-token: <token>"
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  } else if (req.headers['x-auth-token']) {
-    token = req.headers['x-auth-token'];
-  }
-
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'Not authorized, no token provided' });
-  }
-
   try {
+    // 1. Check Better-Auth forwarded session
+    const betterAuthUserId = req.headers['x-user-id'];
+    const betterAuthUserEmail = req.headers['x-user-email'];
+    const betterAuthUserName = req.headers['x-user-name'];
+
+    if (betterAuthUserId) {
+      let user = null;
+      if (mongoose.Types.ObjectId.isValid(betterAuthUserId)) {
+        user = await User.findById(betterAuthUserId);
+      }
+      if (!user && betterAuthUserEmail) {
+        user = await User.findOne({ email: betterAuthUserEmail.toLowerCase() });
+      }
+
+      // If user document doesn't exist yet in Mongoose, create it
+      if (!user) {
+        user = await User.create({
+          ...(mongoose.Types.ObjectId.isValid(betterAuthUserId) ? { _id: betterAuthUserId } : {}),
+          name: betterAuthUserName || 'User',
+          email: betterAuthUserEmail || `user_${betterAuthUserId}@social.local`,
+          password: 'better_auth_social_user_password',
+        });
+      }
+
+      req.user = user;
+      return next();
+    }
+
+    // 2. Check JWT Authorization Header
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.headers['x-auth-token']) {
+      token = req.headers['x-auth-token'];
+    }
+
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'Not authorized, no session or token provided' });
+    }
+
     // DecodedJwtToken verifies signature + expiry using jose
-    // Returns payload: { email, id, iat, exp, iss }
     const payload = await DecodedJwtToken(token);
 
-    // Fetch the user from DB using the id stored in the token payload
     req.user = await User.findById(payload.id).select('-password');
-
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    next(); // ✅ User is authenticated, continue to the route
+    next();
   } catch (error) {
-    // jose throws descriptive errors for expired/invalid tokens
     if (error.code === 'ERR_JWT_EXPIRED') {
       return res.status(401).json({ success: false, message: 'Token expired, please log in again' });
     }
-    return res.status(401).json({ success: false, message: 'Not authorized, invalid token' });
+    return res.status(401).json({ success: false, message: 'Not authorized, invalid authentication' });
   }
 };
 
 /**
  * adminOnly middleware
- * Use AFTER protect to restrict route to admin users only.
  */
 const adminOnly = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
