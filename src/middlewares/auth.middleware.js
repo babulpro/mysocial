@@ -10,9 +10,11 @@ const { DecodedJwtToken } = require('../utils/jwt');
 const protect = async (req, res, next) => {
   let token;
 
-  // Token comes in the header as: "Authorization: Bearer <token>"
+  // Token can come in "Authorization: Bearer <token>" or "x-auth-token: <token>"
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.headers['x-auth-token']) {
+    token = req.headers['x-auth-token'];
   }
 
   if (!token) {

@@ -7,6 +7,10 @@ const sendTokenResponse = async (user, statusCode, res) => {
   // Use jose-based token creator — passes email + id into the payload
   const token = await CreateJwtToken(user.email, user._id.toString());
 
+  // Set the token on response headers
+  res.setHeader('Authorization', `Bearer ${token}`);
+  res.setHeader('x-auth-token', token);
+
   res.status(statusCode).json({
     success: true,
     token,
