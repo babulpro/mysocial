@@ -11,25 +11,23 @@ const errorHandler = require('./middlewares/error.middleware');
 
 const app = express();
 
+// ─── Vercel Path Normalizer ────────────────────────────────────────────────────
+// When Vercel rewrites routes, x-matched-path contains the actual URL requested
+app.use((req, res, next) => {
+  if (req.headers['x-matched-path']) {
+    req.url = req.headers['x-matched-path'];
+  }
+  next();
+});
+
 // ─── Security Middlewares ──────────────────────────────────────────────────────
 app.use(helmet());
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.CLIENT_URL,
-].filter(Boolean);
-
+// origin: true allows all origins (localhost, Vercel frontend, Postman) with credentials
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (Postman, mobile apps, curl, server-to-server)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error(`CORS: origin ${origin} is not allowed`));
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -45,8 +43,32 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// ─── Ignore favicon requests ───────────────────────────────────────────────────
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// ─── Root Route ────────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    message: 'Social Management System Backend is running 🚀',
+    version: '1.0.0',
+    documentation: {
+      health: '/health',
+      auth: {
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login',
+        me: 'GET /api/auth/me',
+      },
+      events: {
+        list: 'GET /api/events',
+        create: 'POST /api/events',
+        single: 'GET /api/events/:id',
+      },
+    },
+  });
+});
+
 // ─── Health Check ──────────────────────────────────────────────────────────────
-// Health check does NOT block on database — it always returns 200 so you can verify the server is live
 app.get('/health', (req, res) => {
   const dbState = mongoose.connection.readyState;
   const dbStatusMap = {
@@ -64,8 +86,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ─── Database Connection Middleware for API routes ─────────────────────────────
-app.use('/api', async (req, res, next) => {
+// ─── Database Middleware (Only for API routes that need MongoDB) ───────────────
+app.use(['/api/auth', '/api/events'], async (req, res, next) => {
   try {
     await connectDB();
     next();
@@ -74,8 +96,10 @@ app.use('/api', async (req, res, next) => {
       success: false,
       message: 'Database connection failed',
       error: error.message,
-      suggestion:
-        'Verify MONGO_DB_URL in Vercel Environment Variables and ensure MongoDB Atlas allows access from anywhere (0.0.0.0/0).',
+      troubleshooting: {
+        step1: 'Check MONGO_DB_URL in Vercel Settings > Environment Variables',
+        step2: 'In MongoDB Atlas > Security > Network Access, add 0.0.0.0/0 (Allow access from anywhere)',
+      },
     });
   }
 });
@@ -86,7 +110,7 @@ app.use('/api/events', eventRoutes);
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
+  res.status(404).json({ success: false, message: `Route ${req.originalUrl || req.url} not found` });
 });
 
 // ─── Global Error Handler (must be LAST) ──────────────────────────────────────
