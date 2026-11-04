@@ -1,12 +1,19 @@
-const { jwtVerify, SignJWT } = require('jose');
+// In Node/Vercel (CommonJS), jose v6 is an ES Module, so we dynamically import it
+let joseModule = null;
+
+const getJose = async () => {
+  if (!joseModule) {
+    joseModule = await import('jose');
+  }
+  return joseModule;
+};
 
 /**
  * Returns the JWT secret as a Uint8Array (required by jose).
- * Reads from JWT_SECRET in .env — never hardcode secrets!
+ * Reads from JWT_SECRET in .env
  */
 const getSecret = () => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET is not defined in .env');
+  const secret = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
   return new TextEncoder().encode(secret);
 };
 
@@ -19,13 +26,14 @@ const getSecret = () => {
  * @returns {Promise<string>} Signed JWT token string
  */
 async function CreateJwtToken(email, id) {
+  const { SignJWT } = await getJose();
   const secret = getSecret();
 
   const token = await new SignJWT({ email, id })
-    .setProtectedHeader({ alg: 'HS256' })   // Algorithm: HMAC-SHA256
-    .setIssuedAt()                           // iat: current timestamp
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
     .setIssuer(process.env.JWT_ISSUER || 'social-management-api')
-    .setExpirationTime(process.env.JWT_EXPIRES_IN || '7d') // Reads from .env
+    .setExpirationTime(process.env.JWT_EXPIRES_IN || '7d')
     .sign(secret);
 
   return token;
@@ -34,12 +42,12 @@ async function CreateJwtToken(email, id) {
 /**
  * DecodedJwtToken
  * Verifies the token signature and returns the decoded payload.
- * Throws an error if the token is invalid or expired.
  *
  * @param {string} token - JWT token string
  * @returns {Promise<object>} Decoded payload { email, id, iat, exp, iss }
  */
 async function DecodedJwtToken(token) {
+  const { jwtVerify } = await getJose();
   const secret = getSecret();
   const { payload } = await jwtVerify(token, secret);
   return payload;
