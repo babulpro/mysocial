@@ -88,7 +88,7 @@ const eventSchema = new mongoose.Schema(
 // ─── Virtual Field ─────────────────────────────────────────────────────────────
 // attendeeCount is calculated on the fly — not stored in DB
 eventSchema.virtual('attendeeCount').get(function () {
-  return this.attendees.length;
+  return Array.isArray(this.attendees) ? this.attendees.length : 0;
 });
 
 // ─── Indexes ───────────────────────────────────────────────────────────────────

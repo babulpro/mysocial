@@ -64,7 +64,6 @@ const getAllEvents = async (req, res, next) => {
 
     const events = await Event.find(filter)
       .populate('organizer', 'name avatar')           // Show organizer's name and avatar
-      .select('-attendees')                            // Don't load full attendee list in list view
       .sort(sort)
       .skip(skip)
       .limit(Number(limit));
