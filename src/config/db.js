@@ -1,24 +1,30 @@
 const mongoose = require('mongoose');
 
-// Cache the connection across serverless function invocations.
-// On Vercel, each request may reuse a warm Lambda — this prevents
-// opening a new MongoDB connection on every single request.
+// Cache the connection across serverless function invocations
 let cachedConnection = null;
 
 const connectDB = async () => {
-  // If already connected, reuse it
+  if (!process.env.MONGO_DB_URL) {
+    throw new Error('MONGO_DB_URL is not defined in environment variables');
+  }
+
+  // If already connected, reuse existing connection
   if (cachedConnection && mongoose.connection.readyState === 1) {
     return cachedConnection;
   }
 
   try {
-    const conn = await mongoose.connect(process.env.MONGO_DB_URL);
+    // serverSelectionTimeoutMS: 5000 prevents serverless functions from hanging
+    const conn = await mongoose.connect(process.env.MONGO_DB_URL, {
+      serverSelectionTimeoutMS: 5000,
+    });
     cachedConnection = conn;
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
     return conn;
   } catch (error) {
     console.error(`❌ MongoDB connection error: ${error.message}`);
-    process.exit(1);
+    // DO NOT use process.exit(1) on Vercel / serverless!
+    throw error;
   }
 };
 
