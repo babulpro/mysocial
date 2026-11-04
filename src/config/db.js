@@ -4,8 +4,9 @@ const mongoose = require('mongoose');
 let cachedConnection = null;
 
 const connectDB = async () => {
-  if (!process.env.MONGO_DB_URL) {
-    throw new Error('MONGO_DB_URL is not defined in environment variables');
+  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_DB_URL;
+  if (!mongoUri) {
+    throw new Error('MONGO_DB_URL or MONGODB_URI is not defined in environment variables');
   }
 
   // If already connected, reuse existing connection
@@ -15,7 +16,7 @@ const connectDB = async () => {
 
   try {
     // serverSelectionTimeoutMS: 5000 prevents serverless functions from hanging
-    const conn = await mongoose.connect(process.env.MONGO_DB_URL, {
+    const conn = await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 5000,
     });
     cachedConnection = conn;
