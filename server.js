@@ -18,6 +18,10 @@ const startServer = async () => {
   });
 };
 
-startServer();
+// Only run listen when started directly (e.g. `node server.js` or `npm run dev`)
+// Never run app.listen() when required by Vercel serverless runtime
+if (require.main === module) {
+  startServer();
+}
 
 module.exports = app;
