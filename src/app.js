@@ -50,8 +50,8 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 // ─── Root Route ────────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
   res.status(200).json({
-    status: 'OK',
-    message: 'Social Management System Backend is running 🚀',
+    status: 'welcome',
+    message: 'Welcome to SocialHub Backend API 🚀',
     version: '1.0.0',
     documentation: {
       health: '/health',
@@ -64,6 +64,8 @@ app.get('/', (req, res) => {
         list: 'GET /api/events',
         create: 'POST /api/events',
         single: 'GET /api/events/:id',
+        join: 'POST /api/events/:id/join',
+        myEvents: 'GET /api/events/user/my-events',
       },
     },
   });
