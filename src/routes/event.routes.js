@@ -19,7 +19,17 @@ const createEventValidation = [
   body('title').trim().notEmpty().withMessage('Title is required').isLength({ min: 3 }).withMessage('Title must be at least 3 characters'),
   body('description').trim().notEmpty().withMessage('Description is required'),
   body('location').trim().notEmpty().withMessage('Location is required'),
-  body('date').isISO8601().withMessage('Please provide a valid date (ISO 8601 format)'),
+  body('date')
+    .isISO8601()
+    .withMessage('Please provide a valid date (ISO 8601 format)')
+    .custom((value) => {
+      const eventDate = new Date(value);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (isNaN(eventDate.getTime()) || eventDate < fiveMinutesAgo) {
+        throw new Error('Event date cannot be in the past. Please select today or a future date.');
+      }
+      return true;
+    }),
 ];
 
 // ─── Routes ────────────────────────────────────────────────────────────────────

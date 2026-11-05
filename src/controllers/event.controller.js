@@ -16,6 +16,16 @@ const createEvent = async (req, res, next) => {
 
     const { title, description, location, date, endDate, maxAttendees, category, coverImage, isPublic, tags } = req.body;
 
+    // Validate that event date is not in the past (allow 5-minute leeway for network/clock skew)
+    const eventDate = new Date(date);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (isNaN(eventDate.getTime()) || eventDate < fiveMinutesAgo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event date cannot be in the past. Please select today or a future date.',
+      });
+    }
+
     // Create event with the logged-in user as organizer
     const event = await Event.create({
       title,
@@ -52,12 +62,22 @@ const createEvent = async (req, res, next) => {
  */
 const getAllEvents = async (req, res, next) => {
   try {
-    const { category, status, page = 1, limit = 10, sort = '-date' } = req.query;
+    const { category, status, page = 1, limit = 10, sort = 'date', includePast, timeframe } = req.query;
 
     // Build the filter object dynamically
     const filter = { isPublic: true };
     if (category) filter.category = category;
     if (status) filter.status = status;
+
+    // Filter by date: By default, only show events from today onwards (today to future dates)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    if (timeframe === 'past') {
+      filter.date = { $lt: startOfToday };
+    } else if (includePast !== 'true') {
+      filter.date = { $gte: startOfToday };
+    }
 
     const skip = (page - 1) * limit;
     const total = await Event.countDocuments(filter);
@@ -116,6 +136,17 @@ const updateEvent = async (req, res, next) => {
     // Only organizer or admin can update
     if (event.organizer.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized to update this event' });
+    }
+
+    if (req.body.date) {
+      const eventDate = new Date(req.body.date);
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (isNaN(eventDate.getTime()) || eventDate < fiveMinutesAgo) {
+        return res.status(400).json({
+          success: false,
+          message: 'Event date cannot be in the past. Please select today or a future date.',
+        });
+      }
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, {
